@@ -51,3 +51,32 @@ jobs:
           path: reports/mutation/
           if-no-files-found: ignore
           retention-days: 30
+
+  # The latest report as a page at https://pages.flisk.si/@mbombeck/mutation-report/,
+  # so it can be read without downloading the artifact. It runs after a failed
+  # floor check too, which is when the report is most worth reading. Only on
+  # main, and it runs none of this repository's code.
+  publish-report:
+    runs-on: ubuntu-24.04
+    name: publish the report (pages.flisk.si)
+    needs: [mutation]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.ref_name == 'main' }}
+    permissions:
+      id-token: write # pages.flisk.si checks this run's OIDC token to know the repository; no secret is used
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mutation-report
+          path: mutation-report
+
+      # Stryker's incremental cache is input for the next run, not for readers.
+      - name: Leave out the incremental cache
+        run: rm -f mutation-report/stryker-incremental.json
+
+      # An outage of pages.flisk.si must not turn the nightly run red.
+      - uses: flisk-sh/pages@ac0c7f25e35cacd0a11d47a28cdb198d295663ee # v1.2.1
+        continue-on-error: true
+        with:
+          path: mutation-report
+          command: publish
+          slug: mutation-report
